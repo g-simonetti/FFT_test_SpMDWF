@@ -1,7 +1,7 @@
 #include <Grid/Grid.h>
 using namespace Grid;
 
-void testDwfMatrix_momentum(GridCartesian &GRID, GridRedBlackCartesian &RBGRID, SpFundamentalRepresentation::LatticeField &Umu, const std::vector<int>& seeds, const int vol, const Coordinate latt_size, GridSerialRNG sRNG, GridParallelRNG pRNG)
+DomainWallFermion<SpWilsonImplD>::FermionField testDwfMatrix_momentum(GridCartesian &GRID, GridRedBlackCartesian &RBGRID, GridCartesian *FGrid, GridRedBlackCartesian *FrbGrid, SpFundamentalRepresentation::LatticeField &Umu, const std::vector<int>& seeds, const int vol, const Coordinate latt_size, GridSerialRNG sRNG, GridParallelRNG pRNG)
 {
   ////////////////////////////////////////////////////
   // Dwf matrix
@@ -9,17 +9,13 @@ void testDwfMatrix_momentum(GridCartesian &GRID, GridRedBlackCartesian &RBGRID, 
     std::cout << "****************************************" << std::endl;
     std::cout << "Testing Fourier representation of Ddwf" << std::endl;
     std::cout << "****************************************" << std::endl;
-
+    
     const int Ls = 32;
     const int sdir = 0;
     RealD mass = 0.01;
     RealD M5 = 1.2;
     Gamma G5(Gamma::Algebra::Gamma5);
 
-    GridCartesian *FGrid = SpaceTimeGrid::makeFiveDimGrid(Ls, &GRID);
-    GridRedBlackCartesian *FrbGrid = SpaceTimeGrid::makeFiveDimRedBlackGrid(Ls, &GRID);
-    
-    
     typedef DomainWallFermion<SpWilsonImplD> SpDomainWallFermionD;
 
     std::cout << "Making Ddwf" << std::endl;
@@ -125,9 +121,12 @@ void testDwfMatrix_momentum(GridCartesian &GRID, GridRedBlackCartesian &RBGRID, 
     std::cout << "Momentum space Ddwf  " << norm2(Kinetic) << std::endl;
     std::cout << "Stencil Ddwf         " << norm2(result5) << std::endl;
     //std::cout << "newresult1         " << norm2(ref5) << std::endl;
+    SpLatticeFermionD kernel_result = result5;
     result5 = result5 - Kinetic;
     std::cout << "diff " << norm2(result5) << std::endl;
     //assert(norm2(result5) < 1.0e-4);
+
+    return kernel_result;
     
 }
 
@@ -241,6 +240,10 @@ int main(int argc, char **argv)
     sRNG.SeedFixedIntegers(seeds); // naughty seeding
     GridParallelRNG pRNG(&GRID);
     pRNG.SeedFixedIntegers(seeds);
+    
+    const int Ls = 32;
+    GridCartesian *FGrid = SpaceTimeGrid::makeFiveDimGrid(Ls, &GRID);
+    GridRedBlackCartesian *FrbGrid = SpaceTimeGrid::makeFiveDimRedBlackGrid(Ls, &GRID);
 
     SpFundamentalRepresentation::LatticeField Umu(&GRID);
     //LatticeGaugeFieldD Umu(&GRID);
@@ -262,7 +265,15 @@ int main(int argc, char **argv)
     std::cout << " Check the output gauge transformation matrices applied to the original field produce the xformed field "<< norm2(Utmp) << " (expect 0)" << std::endl;
     
     // Call the new function here
-    testDwfMatrix_momentum(GRID, RBGRID, Umu, seeds, vol, latt_size, sRNG, pRNG);
+    auto unit_kernel = testDwfMatrix_momentum(
+    GRID, RBGRID, FGrid, FrbGrid, Umu, seeds, vol, latt_size, sRNG, pRNG);
+    auto xform_kernel = testDwfMatrix_momentum(
+    GRID, RBGRID, FGrid, FrbGrid, Urnd, seeds, vol, latt_size, sRNG, pRNG);
+    
+    std::cout << "kernel unit - xform     "
+          << norm2(unit_kernel - xform_kernel)
+          << std::endl;
+
     std::cout << "\n\n\n\n" << std::endl;
     //Return free field propagators obtained from a unitary gauge configuration
     auto unit_prop  = testDwfMatrix_space(GRID, RBGRID, Umu, seeds, vol, latt_size, sRNG, pRNG);
@@ -276,8 +287,6 @@ int main(int argc, char **argv)
           << norm2(unit_prop - xform_prop)
           << std::endl;
     std::cout << "\n\n\n\n" << std::endl;
-
-    testDwfMatrix_momentum(GRID, RBGRID, Urnd, seeds, vol, latt_size, sRNG, pRNG);
     
     Grid_finalize();
     return 0;
